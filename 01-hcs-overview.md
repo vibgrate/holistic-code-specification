@@ -186,6 +186,35 @@ Non-functional essentials that change how the system behaves in production and m
 
 ---
 
+## Behavioural Equivalence — a cross-dimension proof layer
+
+Behavioural equivalence is **not a seventh dimension**. It is a *proof layer that
+sits across* dimensions A (Functional), C (Data), and E (Integration): it takes
+the structural facts those dimensions capture and pins *what the system actually
+does* with them — response shapes, value invariants, and event/protocol ordering —
+so a migration can be proven behaviour-preserving.
+
+- **Assertions** (`BehaviouralAssertion`) bind a claim about behaviour back to the
+  facts it constrains. Each carries a `derivedBy` provenance — `static` (from facts
+  alone, no runtime), `trace` (mined from a frozen execution corpus), or `learned`
+  (active automata learning) — and a `strength` that rises with derivation rigour.
+- **Decision logic** (guards, constraints, computed returns, validation rules) is
+  lowered into **HXL**, the HCS Expression Language: a deterministic, typed,
+  language-agnostic expression IR. The same rule from any source language collapses
+  to one canonical shape, so logic is hashable, diffable, and cross-comparable.
+- **Two honest measures, never blended.** `behaviouralConfidence` (0–100) answers
+  *"of the behaviour that ought to be preserved, how much have we pinned?"* and is
+  **capped by coverage**. `logicCoverage` (0–100) answers *"how much of the
+  decision logic did we capture faithfully rather than leave `Opaque`?"* A green
+  score means "a measured slice is pinned," never "complete."
+
+No LLM participates in deriving an assertion, an HXL expression, or any confidence
+number — the whole point of the layer is predictability.
+
+See [HCS Fact Types · Behavioural & Logic](./04-hcs-fact-types.md#behavioural--logic-fact-types).
+
+---
+
 ## Core Principles
 
 These are the **non-negotiables** of HCS.

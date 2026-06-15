@@ -222,6 +222,40 @@ Examples: `UUID`, `String?`, `List<OrderLine>`, `Map<String, Role>`
 
 ---
 
+## HXL — the HCS Expression Language (v0.4)
+
+Logic-bearing arguments (`If`, `Constraint`, `ValidateInput`, `Return`) no longer
+hold an opaque quoted string. They carry an **`Expr` atom**: a reference to an
+**HXL** expression — a small, typed, language-agnostic expression IR encoded as an
+interned, index-addressed node table.
+
+```ebnf
+Atom ::= … | Expr ;
+Expr ::= "{" "root" ":" Int "," "nodes" ":" List "}" ;   (* HXL node table *)
+```
+
+**Node kinds** (closed set): `Lit`, `Ref`, `Member`, `Call`, `Unary`, `Binary`,
+and `Opaque` for the honest residue. Operands are referenced by integer index, and
+identical subexpressions are interned to a single node.
+
+**Canonical operators** — every source language lowers to one closed set, so TS
+`===`, C# `==`, SQL `=`, and COBOL `EQUAL TO` all become `eq`:
+
+```
+cmp:   eq ne lt le gt ge        logic: and or
+arith: add sub mul div mod      str: concat       set: in notin
+```
+
+HXL renders back into the DSL deterministically — `If order.total lt 0` — and an
+`Opaque` node renders as a visible `«raw»` slice, never silent. Lowering is purely
+mechanical (no LLM); anything outside the captured grammar becomes `Opaque` rather
+than being guessed. The per-expression **fidelity** (`1 − opaque/total`) feeds the
+`logicCoverage` measure in the behavioural layer.
+
+See [HCS Fact Types · Behavioural & Logic](./04-hcs-fact-types.md#behavioural--logic-fact-types).
+
+---
+
 ## Statement Schemas
 
 The HCS grammar is intentionally generic. Precision comes from **statement schemas** — per-keyword contracts that declare allowed arguments, allowed children, cardinality rules, and casing constraints.

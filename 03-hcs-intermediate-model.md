@@ -21,10 +21,44 @@ type HcsModel = {
   integrations: IntegrationsModel
   ui:           UiModel
   graphs:       GraphsModel
+  behaviours:   BehavioursModel       // v0.4 — proof layer + HXL expression tables
   evidenceIndex: Record<string, Evidence[]>
   reproLevel:   "A" | "B" | "C"
 }
 ```
+
+---
+
+## Behaviours (v0.4)
+
+The behaviours section carries the **proof layer** — the assertions about what the
+system *does* — and the **HXL expression tables** their invariants reference. Logic
+is woven into the existing fact graph rather than re-encoded: an assertion's
+`subjectFactIds` link back to the structural facts it constrains.
+
+```typescript
+type BehavioursModel = {
+  assertions: BehaviourAssertionModel[]
+  spec:       BehaviourSpecModel
+  exprTables: Record<string, HxlExprTable>   // exprHash → interned node table
+}
+
+type BehaviourSpecModel = {
+  specId:                string
+  behaviouralConfidence: number    // 0..100 — surface coverage, capped by coverage
+  logicFacts:            number     // count of HXL invariants
+  logicCoverage:         number     // 0..100 — algorithm coverage (1 − opaque ratio)
+}
+
+type HxlExprTable = {
+  nodes: object[]   // flat, index-addressed HXL nodes (SSA-style DAG)
+  root:  number
+}
+```
+
+`behaviouralConfidence` (surface) and `logicCoverage` (algorithm) are **separate
+axes** and are never blended. Full field shapes are in
+[HCS Fact Types · Behavioural & Logic](./04-hcs-fact-types.md#behavioural--logic-fact-types).
 
 ---
 

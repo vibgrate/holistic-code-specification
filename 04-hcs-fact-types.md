@@ -1,10 +1,12 @@
 ![Holistic Code Specification](./assets/hcs-logo-landscape-350.png)
 
-# HCS Fact Types (ABI v0.2)
+# HCS Fact Types (ABI v0.4)
 
-This document defines all fact types in the HCS Fact ABI v0.2 — the JSON interchange format for scanner-produced facts.
+This document defines all fact types in the HCS Fact ABI v0.4 — the JSON interchange format for scanner-produced facts.
 
-There are **25 core fact types** plus **9 COBOL extension types**.
+There are **25 core fact types**, **9 COBOL extension types**, and **4 behavioural & logic types** (added in v0.3–v0.4).
+
+The Fact ABI is **additive**: every type and field from v0.2 remains valid and unchanged. Later versions only add new types and new optional fields.
 
 ---
 
@@ -86,6 +88,15 @@ type Fact = {
 | 32 | [CobolProgramDeclared](#32--cobolprogramdeclared) | COBOL | `programId` | COBOL program metadata (runtime model, dialect, divisions, etc.) |
 | 33 | [CompileDirectiveObserved](#33--compiledirectiveobserved) | COBOL | `sourceFile` + `sourceLine` | CBL/PROCESS/SET compile card directive |
 | 34 | [CobolConfidenceReport](#34--cobolconfidencereport) | COBOL | `programId` | Parse quality metrics for a COBOL program |
+
+**Behavioural & Logic Types** — derived by the behavioural layer (v0.3) and the logic/HXL layer (v0.4)
+
+| # | Fact Type | Category | Key Field(s) | Description |
+|---|-----------|----------|--------------|-------------|
+| 35 | [MethodLogicObserved](#35--methodlogicobserved) | Logic | `logicId` | A guard condition or computed return inside a method body |
+| 36 | [ValidationRuleObserved](#36--validationruleobserved) | Logic | `ruleId` | A declarative validation rule on a schema field |
+| 37 | [BehaviouralAssertion](#37--behaviouralassertion) | Behaviour | `assertionId` | A derived assertion about what the system *does*, bound to the facts it constrains |
+| 38 | [BehaviouralSpec](#38--behaviouralspec) | Behaviour | `specId` | Coverage-honest rollup of all assertions for a scan + application |
 
 ---
 
@@ -917,6 +928,127 @@ payload: {
 
 ---
 
+## Behavioural & Logic Fact Types
+
+These types capture **what the system does** — its decision logic and behaviour —
+not just what it declares. They are **derived deterministically** (no LLM in the
+path): the logic types (`MethodLogicObserved`, `ValidationRuleObserved`) are
+emitted by the language scanners as structural evidence, then the behavioural
+layer lowers them — and the guard predicates inside `DataAccessOperation` steps —
+into assertions.
+
+Decision logic is represented in **HXL**, the HCS Expression Language: a small,
+typed, language-agnostic expression IR encoded as an interned, index-addressed
+node table. The same rule from TypeScript, C#, SQL, or COBOL lowers to one
+canonical shape, so logic is hashable, diffable, and comparable across languages.
+Anything outside the captured grammar becomes a single `Opaque` node carrying the
+raw source — **never dropped, never guessed**.
+
+### 35 — MethodLogicObserved
+
+A unit of business logic inside any function/method body: a **guard** condition
+(`if (cond) throw|return`) or a **computed return** expression. A structural fact;
+the behavioural layer lowers `expression` to HXL and links the resulting invariant
+to the surface fact it protects.
+
+**Required payload fields:** `logicId`, `containerSymbol`, `kind`, `expression`, `filePath`, `line`
+
+```typescript
+payload: {
+  logicId:         string    // (key) containerSymbol:kind:line
+  containerSymbol: string    // qualifiedName of the enclosing method/function
+  kind:            "guard" | "return"
+  expression:      string    // the condition (guard) or returned expression — lowered to HXL
+  effect?:         "throw" | "return" | null    // for guards
+  throwsType?:     string | null                // exception type for throwing guards
+  filePath:        string
+  line:            number
+}
+```
+
+### 36 — ValidationRuleObserved
+
+A declarative validation rule on a schema field (zod, Joi, class-validator, yup).
+The behavioural layer lowers each rule into an HXL invariant, linked to the route
+whose typed request body the schema validates.
+
+**Required payload fields:** `ruleId`, `schemaName`, `fieldName`, `fieldType`, `rule`, `framework`, `filePath`, `line`
+
+```typescript
+payload: {
+  ruleId:     string    // (key) schemaName:fieldName:rule:arg
+  schemaName: string
+  fieldName:  string
+  fieldType:  "string" | "number" | "boolean" | "array" | "enum" | "object" | "unknown"
+  rule:       "min" | "max" | "gt" | "gte" | "lt" | "lte" | "positive"
+            | "nonnegative" | "int" | "length" | "nonempty" | "email"
+            | "url" | "uuid" | "datetime" | "regex" | "enum"
+  arg?:       string | null    // numeric/string argument or regex source
+  framework:  "zod" | "joi" | "class-validator" | "yup"
+  filePath:   string
+  line:       number
+}
+```
+
+### 37 — BehaviouralAssertion
+
+A derived assertion about what the system **does**, bound to the structural facts
+it constrains — the unit of behavioural proof. Coverage-bounded: a `trace` or
+`learned` assertion is valid only relative to its frozen corpus (`corpusRef`).
+For `invariant` assertions, `expr` carries the predicate as an **HXL node table**.
+
+**Required payload fields:** `assertionId`, `kind`, `subjectFactIds`, `predicate`, `derivedBy`, `strength`
+
+```typescript
+payload: {
+  assertionId:    string    // (key) content hash over (kind, sorted subjectFactIds, predicate)
+  kind:           "contract" | "golden" | "invariant" | "temporal" | "model"
+  subjectFactIds: string[]  // HCS factIds this assertion constrains — the groundedness link
+  predicate:      string    // the constraint, in rendered (round-trip) form
+  derivedBy:      "static" | "trace" | "learned"
+  corpusRef?:     string | null    // required when derivedBy is "trace" or "learned"; null for "static"
+  strength:       number    // 0..1 — rises with derivation rigour; weights behaviouralConfidence
+  label?:         string    // presentation only — never folded into the hash
+  expr?: {                  // HXL Expression IR (invariants): the logic as a fact
+    root:  number
+    nodes: Array<{
+      k:      "Lit" | "Ref" | "Member" | "Call" | "Unary" | "Binary" | "Opaque"
+      // operand fields by kind — value/type (Lit), name (Ref/Member), obj (Member),
+      // callee/args (Call), op/x (Unary), op/l/r (Binary), raw (Opaque)
+    }>
+  }
+}
+```
+
+### 38 — BehaviouralSpec
+
+The coverage-honest rollup of all `BehaviouralAssertion` facts for a scan +
+application. Diffable by `specId` across scans to detect behavioural change.
+`behaviouralConfidence` measures **surface** coverage; `logicCoverage` measures
+**algorithm** coverage (how much decision logic lowered to faithful, non-`Opaque`
+HXL). The two are reported separately, never blended.
+
+**Required payload fields:** `specId`, `scanId`, `applicationId`, `assertionIds`, `coverage`, `behaviouralConfidence`
+
+```typescript
+payload: {
+  specId:                string    // (key) content hash over (scanId, ordered assertionIds)
+  scanId:                string
+  applicationId:         string
+  assertionIds:          string[]  // factIds of the composing BehaviouralAssertion facts
+  coverage: {
+    surfaceFacts:  number    // behaviour-bearing surface facts in scope (denominator)
+    assertedFacts: number    // surface facts with at least one assertion (numerator)
+    byKind?:       Record<string, number>
+  }
+  behaviouralConfidence: number    // 0..100 — surface coverage, CAPPED BY COVERAGE
+  logicFacts?:           number    // count of HXL invariants (v0.4)
+  logicCoverage?:        number    // 0..100 — algorithm coverage = 1 − (opaque/total) (v0.4)
+}
+```
+
+---
+
 ## FactId Generation
 
 ```
@@ -947,6 +1079,10 @@ The `canonicalKey` is the sorted canonical JSON serialisation of the key field(s
 {"factId":"hcs:EntityDeclared:d4e5f60011000001","factType":"EntityDeclared","language":"csharp","scanner":"roslyn","scannerVersion":"0.2.0","payload":{"entityId":"entity:User","name":"User","tableName":"Users","schema":"dbo","sourceFile":"src/Models/User.cs","sourceLine":5}}
 {"factId":"hcs:SqlObjectDeclared:c9f21a3b44e02001","factType":"SqlObjectDeclared","language":"sql","scanner":"sql-parser","scannerVersion":"0.2.0","payload":{"objectName":"dbo.usp_GetOrdersByCustomer","objectType":"procedure","schema":"dbo","sourceFile":"sql/procedures/usp_GetOrdersByCustomer.sql","parameters":[{"paramName":"@CustomerId","dataType":"INT","direction":"in"}],"referencedObjects":["dbo.Orders","dbo.Customers"]}}
 {"factId":"hcs:DataAccessOperation:b2b2b2b200000001","factType":"DataAccessOperation","language":"csharp","scanner":"roslyn","scannerVersion":"0.2.0","payload":{"operationId":"dao:ProductRepository.DeleteAsync","callerSymbol":"MyApp.Repositories.ProductRepository.DeleteAsync","semanticKind":"soft-delete","targetEntity":"Product","isAsync":true,"steps":[{"stepKind":"query-one","description":"Find product by ID"},{"stepKind":"guard","description":"Throw if not found","throwsOnFail":"NotFoundException"},{"stepKind":"mutate","mutatedFields":["IsActive"]},{"stepKind":"persist"}]}}
+{"factId":"hcs:MethodLogicObserved:f5f5f5f500000001","factType":"MethodLogicObserved","language":"typescript","scanner":"ts-morph","scannerVersion":"0.4.0","payload":{"logicId":"OrderService.deleteAsync:guard:102","containerSymbol":"OrderService.deleteAsync","kind":"guard","expression":"order.total < 0","effect":"throw","throwsType":"InvalidStateException","filePath":"src/order/order.service.ts","line":102}}
+{"factId":"hcs:ValidationRuleObserved:a6a6a6a600000001","factType":"ValidationRuleObserved","language":"typescript","scanner":"ts-morph","scannerVersion":"0.4.0","payload":{"ruleId":"CreateUserSchema:email:min:8","schemaName":"CreateUserSchema","fieldName":"email","fieldType":"string","rule":"min","arg":"8","framework":"zod","filePath":"src/user/dto/create-user.schema.ts","line":7}}
+{"factId":"hcs:BehaviouralAssertion:e7e7e7e700000001","factType":"BehaviouralAssertion","language":"multi","scanner":"hcs-behavioural","scannerVersion":"0.4.0","payload":{"assertionId":"ba:invariant:9c1f2ab3","kind":"invariant","subjectFactIds":["hcs:MethodLogicObserved:f5f5f5f500000001"],"predicate":"order.total lt 0","derivedBy":"static","corpusRef":null,"strength":0.8,"label":"guard order.total lt 0","expr":{"root":3,"nodes":[{"k":"Ref","name":"order"},{"k":"Member","obj":0,"name":"total"},{"k":"Lit","value":0,"type":"int"},{"k":"Binary","op":"lt","l":1,"r":2}]}}}
+{"factId":"hcs:BehaviouralSpec:e3e3e3e300000001","factType":"BehaviouralSpec","language":"multi","scanner":"hcs-behavioural","scannerVersion":"0.4.0","payload":{"specId":"spec:scan_8842:v1","scanId":"scan_8842","applicationId":"app_orders","assertionIds":["hcs:BehaviouralAssertion:e7e7e7e700000001"],"coverage":{"surfaceFacts":120,"assertedFacts":78,"byKind":{"contract":64,"invariant":12,"temporal":2}},"behaviouralConfidence":61,"logicFacts":12,"logicCoverage":83}}
 ```
 
 ---

@@ -35,6 +35,14 @@ HCS is a **specification artifact** with:
 - Traceability (every claim links back to evidence in code)
 - Pattern compression (common idioms collapse into named patterns)
 
+### Behavioural Equivalence (Fact ABI v0.3–v0.4)
+Beyond structure, HCS pins *what the system does*: **behavioural assertions** bound
+to the facts they constrain, and decision logic captured in **HXL** — the
+deterministic, language-agnostic HCS Expression Language. Two honest, separate
+measures report progress: `behaviouralConfidence` (surface coverage) and
+`logicCoverage` (how much decision logic was captured faithfully). No LLM is ever
+in the path. See [Overview · Behavioural Equivalence](./01-hcs-overview.md#behavioural-equivalence--a-cross-dimension-proof-layer).
+
 ### Reproducibility
 A system is reproducible from HCS when it contains enough detail to regenerate:
 - Domain behaviour (use-cases and workflows)
