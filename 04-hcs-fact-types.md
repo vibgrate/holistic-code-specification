@@ -997,24 +997,30 @@ it constrains — the unit of behavioural proof. Coverage-bounded: a `trace` or
 `learned` assertion is valid only relative to its frozen corpus (`corpusRef`).
 For `invariant` assertions, `expr` carries the predicate as an **HXL node table**.
 
-**Required payload fields:** `assertionId`, `kind`, `subjectFactIds`, `predicate`, `derivedBy`, `strength`
+**Required payload fields:** `id`, `assertionId`, `kind`, `subjectFactIds`, `statement`, `predicate`, `derivedBy`, `confidence`, `strength`, `evidence`
 
 ```typescript
 payload: {
-  assertionId:    string    // (key) content hash over (kind, sorted subjectFactIds, predicate)
-  kind:           "contract" | "golden" | "invariant" | "temporal" | "model"
-  subjectFactIds: string[]  // HCS factIds this assertion constrains — the groundedness link
+  id:             string    // (key, FR-BEH-1) content hash over (kind, sorted subjectFactIds, predicate)
+  assertionId:    string    // back-compat alias of `id` for pre-v0.5 readers
+  kind:           "invariant" | "contract" | "effect" | "ordering"   // FR-BEH-1
+  subjectFactIds: string[]  // HCS factIds this assertion constrains (non-empty) — the groundedness link
+  statement:      string    // FR-BEH-1 human-facing statement; mirrors the rendered predicate
   predicate:      string    // the constraint, in rendered (round-trip) form
-  derivedBy:      "static" | "trace" | "learned"
-  corpusRef?:     string | null    // required when derivedBy is "trace" or "learned"; null for "static"
+  derivedBy:      "declared" | "static" | "trace" | "learned"        // FR-OBS-1
+  confidence:     "Observed" | "Derived" | "Hypothesized"            // FR-CONF-1; gated by derivedBy (FR-OBS-2)
+  corpusRef?:     string | null    // required when derivedBy is "trace" or "learned"; null for "static"/"declared"
   strength:       number    // 0..1 — rises with derivation rigour; weights behaviouralConfidence
+  evidence:       unknown[] // FR-BEH-1 evidence items (derived facts may carry an empty array)
+  predicateExprHash?: string // FR-BEH-1 — references an entry in BehaviouralSpec.exprTables (invariants)
   label?:         string    // presentation only — never folded into the hash
   expr?: {                  // HXL Expression IR (invariants): the logic as a fact
     root:  number
     nodes: Array<{
-      k:      "Lit" | "Ref" | "Member" | "Call" | "Unary" | "Binary" | "Opaque"
+      k:      "Lit" | "Ref" | "Member" | "Call" | "Unary" | "Binary" | "Cond" | "Slice" | "Index" | "Opaque"
       // operand fields by kind — value/type (Lit), name (Ref/Member), obj (Member),
-      // callee/args (Call), op/x (Unary), op/l/r (Binary), raw (Opaque)
+      // callee/args (Call), op/x (Unary), op/l/r (Binary), cond/then/else (Cond),
+      // base/start/length (Slice), base/index (Index), raw (Opaque)
     }>
   }
 }
@@ -1028,22 +1034,31 @@ application. Diffable by `specId` across scans to detect behavioural change.
 **algorithm** coverage (how much decision logic lowered to faithful, non-`Opaque`
 HXL). The two are reported separately, never blended.
 
-**Required payload fields:** `specId`, `scanId`, `applicationId`, `assertionIds`, `coverage`, `behaviouralConfidence`
+**Required payload fields:** `factAbiVersion`, `modelSchemaVersion`, `specId`, `scanId`, `applicationId`, `confidence`, `assertionIds`, `coverage`, `confidenceComponents`, `behaviouralConfidence`, `logicFacts`, `logicCoverage`
 
 ```typescript
 payload: {
+  factAbiVersion:        "0.5"     // FR-VER-1 — additive fact-ABI line
+  modelSchemaVersion:    "0.5"     // FR-VER-1 — intermediate-model envelope shape
   specId:                string    // (key) content hash over (scanId, ordered assertionIds)
   scanId:                string
   applicationId:         string
+  confidence:            "Observed" | "Derived" | "Hypothesized"   // FR-CONF-1 — claim confidence of the rollup
   assertionIds:          string[]  // factIds of the composing BehaviouralAssertion facts
   coverage: {
     surfaceFacts:  number    // behaviour-bearing surface facts in scope (denominator)
     assertedFacts: number    // surface facts with at least one assertion (numerator)
     byKind?:       Record<string, number>
   }
-  behaviouralConfidence: number    // 0..100 — surface coverage, CAPPED BY COVERAGE
-  logicFacts?:           number    // count of HXL invariants (v0.4)
-  logicCoverage?:        number    // 0..100 — algorithm coverage = 1 − (opaque/total) (v0.4)
+  confidenceComponents: {    // FR-BEH-2 — named components; a validator recomputes the score
+    coverage:  number        // 0..1 — assertedFacts / surfaceFacts
+    rigour:    number        // 0..1 — mean(w(derivedBy) × strength)
+    agreement: number        // 0..1 — 1 − contradicting pairs / total pairs
+  }
+  behaviouralConfidence: number    // 0..100 = round(100 × min(coverage, rigour × agreement)); CAPPED BY COVERAGE (FR-BEH-3)
+  logicFacts:            number    // FR-BEH-4 — count of captured logic exprs (MethodLogic + ValidationRule)
+  logicCoverage:         number    // 0..100 — algorithm coverage = round(100 × (1 − Σ opaque / Σ total))
+  exprTables?:           Record<string, { nodes: unknown[]; root: number }>  // HXL tables keyed by exprHash
 }
 ```
 
@@ -1067,6 +1082,11 @@ The `canonicalKey` is the sorted canonical JSON serialisation of the key field(s
 | `B` | **Cross-referenced** — resolved via name matching | Source location, high confidence |
 | `C` | **Heuristic** — pattern-matched or regex-based | May lack precise source location |
 
+> `reproLevel` is a **per-scan / per-section** evidence-quality grade. It is
+> orthogonal to the **per-fact** `confidence` value (`Observed | Derived |
+> Hypothesized`) and is never conflated with it (FR-CONF-3): the `C` level's
+> "Heuristic" label describes the evidence method, not a `confidence` value.
+
 ---
 
 ## NDJSON Examples
@@ -1081,8 +1101,8 @@ The `canonicalKey` is the sorted canonical JSON serialisation of the key field(s
 {"factId":"hcs:DataAccessOperation:b2b2b2b200000001","factType":"DataAccessOperation","language":"csharp","scanner":"roslyn","scannerVersion":"0.2.0","payload":{"operationId":"dao:ProductRepository.DeleteAsync","callerSymbol":"MyApp.Repositories.ProductRepository.DeleteAsync","semanticKind":"soft-delete","targetEntity":"Product","isAsync":true,"steps":[{"stepKind":"query-one","description":"Find product by ID"},{"stepKind":"guard","description":"Throw if not found","throwsOnFail":"NotFoundException"},{"stepKind":"mutate","mutatedFields":["IsActive"]},{"stepKind":"persist"}]}}
 {"factId":"hcs:MethodLogicObserved:f5f5f5f500000001","factType":"MethodLogicObserved","language":"typescript","scanner":"ts-morph","scannerVersion":"0.4.0","payload":{"logicId":"OrderService.deleteAsync:guard:102","containerSymbol":"OrderService.deleteAsync","kind":"guard","expression":"order.total < 0","effect":"throw","throwsType":"InvalidStateException","filePath":"src/order/order.service.ts","line":102}}
 {"factId":"hcs:ValidationRuleObserved:a6a6a6a600000001","factType":"ValidationRuleObserved","language":"typescript","scanner":"ts-morph","scannerVersion":"0.4.0","payload":{"ruleId":"CreateUserSchema:email:min:8","schemaName":"CreateUserSchema","fieldName":"email","fieldType":"string","rule":"min","arg":"8","framework":"zod","filePath":"src/user/dto/create-user.schema.ts","line":7}}
-{"factId":"hcs:BehaviouralAssertion:e7e7e7e700000001","factType":"BehaviouralAssertion","language":"multi","scanner":"hcs-behavioural","scannerVersion":"0.4.0","payload":{"assertionId":"ba:invariant:9c1f2ab3","kind":"invariant","subjectFactIds":["hcs:MethodLogicObserved:f5f5f5f500000001"],"predicate":"order.total lt 0","derivedBy":"static","corpusRef":null,"strength":0.8,"label":"guard order.total lt 0","expr":{"root":3,"nodes":[{"k":"Ref","name":"order"},{"k":"Member","obj":0,"name":"total"},{"k":"Lit","value":0,"type":"int"},{"k":"Binary","op":"lt","l":1,"r":2}]}}}
-{"factId":"hcs:BehaviouralSpec:e3e3e3e300000001","factType":"BehaviouralSpec","language":"multi","scanner":"hcs-behavioural","scannerVersion":"0.4.0","payload":{"specId":"spec:scan_8842:v1","scanId":"scan_8842","applicationId":"app_orders","assertionIds":["hcs:BehaviouralAssertion:e7e7e7e700000001"],"coverage":{"surfaceFacts":120,"assertedFacts":78,"byKind":{"contract":64,"invariant":12,"temporal":2}},"behaviouralConfidence":61,"logicFacts":12,"logicCoverage":83}}
+{"factId":"hcs:BehaviouralAssertion:e7e7e7e700000001","factType":"BehaviouralAssertion","language":"multi","scanner":"hcs-behavioural","scannerVersion":"0.5.0","payload":{"id":"ba:invariant:9c1f2ab3","assertionId":"ba:invariant:9c1f2ab3","kind":"invariant","subjectFactIds":["hcs:MethodLogicObserved:f5f5f5f500000001"],"statement":"order.total lt 0","predicate":"order.total lt 0","derivedBy":"static","confidence":"Derived","corpusRef":null,"strength":0.8,"evidence":[],"predicateExprHash":"hxl:1b9e0c4f2a7d3c58","label":"guard order.total lt 0","expr":{"root":3,"nodes":[{"k":"Ref","name":"order"},{"k":"Member","obj":0,"name":"total"},{"k":"Lit","value":0,"type":"int"},{"k":"Binary","op":"lt","l":1,"r":2}]}}}
+{"factId":"hcs:BehaviouralSpec:e3e3e3e300000001","factType":"BehaviouralSpec","language":"multi","scanner":"hcs-behavioural","scannerVersion":"0.5.0","payload":{"factAbiVersion":"0.5","modelSchemaVersion":"0.5","specId":"spec:scan_8842:v1","scanId":"scan_8842","applicationId":"app_orders","confidence":"Derived","assertionIds":["hcs:BehaviouralAssertion:e7e7e7e700000001"],"coverage":{"surfaceFacts":120,"assertedFacts":78,"byKind":{"contract":64,"invariant":12,"ordering":2}},"confidenceComponents":{"coverage":0.65,"rigour":0.78,"agreement":1},"behaviouralConfidence":65,"logicFacts":12,"logicCoverage":83,"exprTables":{"hxl:1b9e0c4f2a7d3c58":{"root":3,"nodes":[{"k":"Ref","name":"order"},{"k":"Member","obj":0,"name":"total"},{"k":"Lit","value":0,"type":"int"},{"k":"Binary","op":"lt","l":1,"r":2}]}}}}
 ```
 
 ---

@@ -12,7 +12,8 @@ It is language-agnostic, schema-validated, and deterministically sorted.
 
 ```typescript
 type HcsModel = {
-  version: "0.1"
+  factAbiVersion:     "0.5"   // FR-VER-1 — additive fact-ABI line
+  modelSchemaVersion: "0.5"   // FR-VER-1 — intermediate-model envelope shape
   repo: { root: string; revision?: string }
   symbols:      Record<string, SymbolModel>
   routes:       RouteModel[]
@@ -21,9 +22,10 @@ type HcsModel = {
   integrations: IntegrationsModel
   ui:           UiModel
   graphs:       GraphsModel
-  behaviours:   BehavioursModel       // v0.4 — proof layer + HXL expression tables
+  behaviours:   BehavioursModel       // proof layer + HXL expression tables
   evidenceIndex: Record<string, Evidence[]>
-  reproLevel:   "A" | "B" | "C"
+  reproLevel:   "A" | "B" | "C"                   // FR-REPRO-1/2 — worst-of present sections
+  sectionRepro?: Partial<Record<"data" | "integration" | "security" | "ui" | "behaviour", "A" | "B" | "C">>
 }
 ```
 
@@ -75,7 +77,7 @@ type SymbolModel = {
   isStatic:   boolean
   isAsync:    boolean
   attributes: AttributeModel[]
-  confidence: "Observed" | "Derived" | "Heuristic"
+  confidence: "Observed" | "Derived" | "Hypothesized"  // FR-CONF-1
   evidence:   Evidence[]
 }
 

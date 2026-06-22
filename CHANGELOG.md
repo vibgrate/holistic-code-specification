@@ -2,15 +2,160 @@
 
 # HCS Changelog
 
-The HCS Fact ABI is **additive**: every fact type and field from an earlier
-version remains valid and unchanged in later versions. A version bump only adds
-new fact types and new optional fields — never removes or renames.
+The HCS Fact ABI is **additive within a minor line**: every fact type and field
+from an earlier version remains valid and unchanged in later versions, and a
+version bump only adds new fact types and new optional fields — never removes or
+renames. The single exception in v0.5 is the **confidence-vocabulary change**,
+which is explicitly declared breaking below and shipped with an input-alias
+window (FR-MIG-1) so v0.4 models keep loading.
 
 | Version | Date | Theme |
 |---------|------|-------|
+| [v0.5.0](#v050--16-june-2026) | 16 June 2026 | Conformance hardening: confidence vocabulary, dual versions, HXL `Cond`/`Slice`/`Index`, componentised behaviouralConfidence, reproLevel section map |
 | [v0.4.0](#v040--15-june-2026) | 15 June 2026 | Logic-as-a-fact: HXL expression IR + logic facts |
 | [v0.3.0](#v030--13-june-2026) | 13 June 2026 | Behavioural specification & equivalence layer |
 | [v0.2.0](#v020--5-march-2026) | 5 March 2026 | Initial public release: 25 core + 9 COBOL fact types, 100 patterns |
+
+---
+
+## v0.5.0 — 16 June 2026
+
+### Fact ABI v0.5 / Model Schema v0.5 — Conformance hardening
+
+v0.5 makes the model and the `.hcs` view objectively **conformance-testable**:
+every derived number is now a deterministic function of facts in the model, the
+expression IR closes its remaining gaps, and the trust/version vocabulary is
+unified. Targets **Fact ABI v0.5** and **Model Schema v0.5**. See the full
+requirements in `spec/` and the migration guide in
+[`MIGRATION-v0.4-to-v0.5.md`](./MIGRATION-v0.4-to-v0.5.md).
+
+> **⚠️ Breaking change (FR-CONF-1 / FR-MIG-2): claim-confidence vocabulary.**
+> The per-fact `confidence` vocabulary is now exactly `Observed | Derived |
+> Hypothesized`. The legacy values `Asserted`, `Inferred`, and `Heuristic` are
+> **removed** from the producer vocabulary. For the whole v0.5 line, consumers
+> **MUST** accept the deprecated inputs and normalise them (the aliases are
+> removed in v0.6):
+>
+> | Deprecated input (v0.4) | Canonical (v0.5) |
+> |-------------------------|------------------|
+> | `Asserted`              | `Observed`       |
+> | `Inferred`              | `Derived`        |
+> | `Heuristic`             | `Hypothesized`   |
+>
+> A `Hypothesized` fact **MUST** carry a non-empty `heuristicId` (FR-CONF-2).
+> `confidence` is **per-fact** and orthogonal to the **per-scan** `reproLevel`
+> A/B/C grade — the two are never conflated (FR-CONF-3).
+
+#### Versioning & ABI stability (FR-VER)
+
+- **Dual version fields.** The model root and `NormalizerOutput` now carry both
+  `factAbiVersion: "0.5"` (additive fact-ABI line) and `modelSchemaVersion:
+  "0.5"` (intermediate-model envelope shape). The legacy single `version` field
+  is **removed**.
+- **Additive ABI rule.** Within a `factAbiVersion` minor line, producers MUST NOT
+  remove, rename, or retype an existing field; only additions are allowed. A
+  breaking change increments the major component.
+- **Forward-compatibility.** Consumers branch on `factAbiVersion` and ignore
+  unknown fields without error.
+
+#### HXL expression IR (FR-HXL / FR-ID)
+
+- **Three new node kinds** close the most common `Opaque` residues:
+  - `Cond { cond, then, else }` — ternary `?:`, `CASE WHEN`, value-yielding
+    `IF/ELSE`, reducible `EVALUATE`.
+  - `Slice { base, start, length? }` — substring / COBOL reference modification
+    `X(s:l)`, `SUBSTRING`, constant-foldable `.slice` / `.Substring`.
+  - `Index { base, index }` — array/table subscript, COBOL `OCCURS` subscript.
+
+  The reference ternary and the COBOL reference-modification fixtures now lower
+  with **zero `Opaque` nodes** (`logicCoverage` 100).
+- **`exprHash` is now `"hxl:" + sha256(canonicalExpr)[0:16]`**, computed over the
+  **canonical structural** node table (post-order traversal from `root`,
+  re-indexed operands, typed literals). It is independent of source formatting
+  and of the original interning order, and is **stable across future node-kind
+  additions** (FR-ID-3).
+- **Honest residue (FR-HXL-4).** Only the minimal non-lowerable sub-tree is
+  wrapped as `Opaque { raw }`; producers never guess a non-`Opaque` node.
+- **Fidelity & coverage (FR-HXL-5).** `fidelity = 1 − opaqueNodes/totalNodes`
+  per expression; `logicCoverage = round(100 × (1 − Σ opaque / Σ total))` over
+  all captured logic expressions.
+
+#### Behavioural specification (FR-BEH / FR-OBS)
+
+- **Assertion kinds** narrowed to the normative set `invariant | contract |
+  effect | ordering`. (`golden` / `temporal` / `model` are removed.)
+- **`derivedBy` taxonomy** is now `declared | static | trace | learned`, with the
+  epistemic spine `declared → observed(static, trace) → conjectured(learned)`.
+  Promotion gates (FR-OBS-2): a `learned` fact is never `Observed`; a `trace`
+  fact links `TraceObserved` evidence and is never above `Derived`.
+- **Componentised `behaviouralConfidence`** (FR-BEH-2). The score is now a
+  deterministic function of named components — never hand-set:
+
+  ```
+  behaviouralConfidence = round( 100 × min( coverage, rigour × agreement ) )
+  ```
+
+  where `coverage` is the fraction of behaviour-bearing surface facts bound by
+  ≥1 assertion, `rigour = mean(w(derivedBy) × strength)` with
+  `w(static)=1.0, w(trace)=0.8, w(declared)=0.6, w(learned)=0.4`, and
+  `agreement = 1 − contradicting pairs / total pairs`. The `min(coverage, …)`
+  term is the **coverage cap** (FR-BEH-3) — the score can never exceed
+  `round(100 × coverage)`. The named components are round-tripped on the spec so
+  a validator can recompute it.
+- **`BehaviouralAssertion`** now carries `id`, `statement`, `evidence[]`, a
+  canonical `confidence`, and (for invariants) `predicateExprHash` referencing an
+  entry in `BehaviouralSpec.exprTables`.
+- **`logicFacts`** (FR-BEH-4) is exactly the count of captured logic expressions
+  (`MethodLogicObserved` + `ValidationRuleObserved` carrying an `Expr`).
+- **`TraceObserved`** is added to the schema (additive, populated later): every
+  consumer accepts it; producers may omit it in v0.5.
+
+#### Reproducibility levels (FR-REPRO)
+
+- The model root carries `reproLevel ∈ {A, B, C}` and SHOULD carry
+  `sectionRepro: Record<{data, integration, security, ui, behaviour}, A|B|C>`.
+- `reproLevel` is the **worst-of** the present sections (FR-REPRO-2); each
+  section level is assigned by the measurable thresholds in Appendix B and is
+  recomputed from facts in the model (FR-REPRO-3).
+
+#### Determinism (FR-DET)
+
+- The **model** is byte-identical for an identical fact set (canonical form:
+  UTF-8/LF, sorted keys, deterministic array ordering, canonical numbers). The
+  **DSL** is template-deterministic — every token derives from a fact or a fixed
+  template. The phrase "minimal nondeterministic wording" is removed.
+
+#### COBOL / mainframe (FR-COB) & DSL (FR-DSL)
+
+- Deterministic `RecordLayoutDeclared` byte layout from PIC/USAGE (e.g. `COMP-3`
+  width = `ceil((digits + 1) / 2)`); optional additive `physicalEncoding`.
+- `ValidationRuleObserved` is **inapplicable to COBOL** — procedural checks
+  surface as `MethodLogicObserved`, so an all-`MethodLogicObserved` `logicFacts`
+  count is not under-coverage.
+- In-scope cross-references (`FileResourceDeclared.jclDdRef`,
+  `CicsTransactionDeclared.program`) resolve to an existing `factId`; out-of-scope
+  referents are marked unresolved, never fabricated.
+- `RouteChar` grammar fixed to `/[A-Za-z0-9_{}:/-]/`; all nine COBOL fact types
+  have a DSL rendering (no model-only fact type).
+
+#### Schema, validator & conformance (FR-SCH / FR-VAL / FR-CNF)
+
+- A published JSON Schema (draft 2020-12) is the authoritative structural
+  artifact; prose must not contradict it.
+- A reference validator recomputes every `factId`, `exprHash`, `fidelity`,
+  `logicCoverage`, `logicFacts`, and `behaviouralConfidence`, checks the
+  reproLevel worst-of and the promotion gates, and verifies canonical
+  re-serialisation, with the exit-code contract in Appendix I.
+- A conformance corpus (TypeScript, C#, COBOL) includes a cross-language
+  `exprHash` equivalence (`lt` and `eq` matching across languages).
+
+#### Migration & claim scoping (FR-MIG)
+
+- The confidence-vocabulary change is declared breaking with the alias map
+  above; see [`MIGRATION-v0.4-to-v0.5.md`](./MIGRATION-v0.4-to-v0.5.md).
+- The product claim is scoped to **"migration-grade inventory and
+  behaviour-pinning,"** with full behavioural reproduction positioned as a
+  roadmap item.
 
 ---
 

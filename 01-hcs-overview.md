@@ -280,7 +280,16 @@ Never by free-form prose drift.
 
 ## Semantic Guarantees
 
-HCS defines three reproducibility levels (**Level A**, **Level B**, **Level C**) that communicate confidence.
+HCS reports two **independent, never-conflated** axes (FR-CONF-3):
+
+- **`reproLevel`** — a per-scan / per-section evidence-quality grade `A | B | C`
+  (below), assigned by the measurable thresholds in the spec's Appendix B.
+- **`confidence`** — a per-fact claim-trust value, exactly one of `Observed |
+  Derived | Hypothesized` (FR-CONF-1). A `Hypothesized` fact carries a
+  `heuristicId` (FR-CONF-2).
+
+A scan (or section) carries a `reproLevel`; an individual claim carries a
+`confidence`. Neither is defined in terms of the other.
 
 ### Level A — Compiler-grade
 
@@ -292,7 +301,7 @@ HCS defines three reproducibility levels (**Level A**, **Level B**, **Level C**)
 - Entity fields include physical column names confirmed by ORM metadata or SQL schema
 - Auth boundaries are confirmed by middleware registration or attribute analysis
 
-**Allowed `confidence` values:** `Asserted`
+Facts at this level are typically `Observed`.
 
 ### Level B — Cross-referenced
 
@@ -301,10 +310,10 @@ HCS defines three reproducibility levels (**Level A**, **Level B**, **Level C**)
 - Evidence comes from tree-sitter (at least one pass) **plus** at least one cross-reference signal
 - Symbol names may be simple (not always fully qualified)
 - Route templates are extracted from source code but without full semantic resolution
-- Entity fields are present but physical column names may be inferred
-- Auth boundaries are inferred from naming conventions or decorator names
+- Entity fields are present but physical column names may be `Derived`
+- Auth boundaries are derived from naming conventions or decorator names
 
-**Allowed `confidence` values:** `Inferred`
+Facts at this level are typically `Observed` or `Derived`.
 
 ### Level C — Heuristic-only
 
@@ -314,7 +323,7 @@ HCS defines three reproducibility levels (**Level A**, **Level B**, **Level C**)
 - No compiler or AST evidence
 - Claims should be reviewed before being actioned
 
-**Allowed `confidence` values:** `Inferred`
+Facts at this level are typically `Hypothesized` (with a `heuristicId`).
 
 ---
 
