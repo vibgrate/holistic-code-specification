@@ -2,11 +2,11 @@
 
 # HCS Overview
 
-> **Holistic Code Specification** is a structured-English, evidence-linked, pattern-compressed system blueprint generated deterministically from code, designed to be complete enough for migration and faithful reimplementation.
+> **Holistic Code Specification** is a structured-English, evidence-linked, pattern-compressed **description of a software system**, generated deterministically from its source code — a migration-grade inventory of what a system does, what it depends on, and how it behaves.
 
 ## Definition
 
-**Holistic Code Specification (HCS)** is a deterministic, reproducible, human-readable system blueprint automatically derived from source code (and related assets) that captures the full operational reality of a software system across functionality, UI interactions, data models, security, integrations, and runtime behaviours — in a form that is precise enough to rebuild the system.
+**Holistic Code Specification (HCS)** is a deterministic, human-readable description of a software system, automatically derived from source code (and related assets). It captures the operational reality of a system across functionality, UI interactions, data models, security, integrations, and runtime behaviours — with every claim linked back to the source evidence it came from.
 
 HCS is **not** documentation and **not** summaries. It is a specification artifact.
 
@@ -34,7 +34,7 @@ A canonical JSON/YAML model produced by scanners:
 
 The HCS text is a **rendering** of this model. YAML is authoritative; the DSL is rendered from YAML.
 
-### 3 — Evidence Graph (trust & reproducibility)
+### 3 — Evidence Graph (trust & traceability)
 
 Every statement has **Evidence Links**:
 
@@ -49,18 +49,24 @@ Every statement has **Evidence Links**:
 
 ---
 
-## What "Reproduce Software from HCS" Means
+## What HCS Describes
 
-A system is **reproducible from HCS** when HCS contains enough detail to regenerate:
+HCS is built to **discover and describe what a system actually does** — as
+deterministic, evidence-linked facts you can drill into. Across a scan it captures:
 
-- Domain behaviour (use-cases and workflows)
-- Interface contracts (UI + APIs + message schemas)
-- Data structures (entities, constraints, relationships)
-- Security posture (auth flows, authorization rules, boundaries)
-- Integration behaviour (calls, retries, timeouts, idempotency)
-- Non-functional essentials that change behaviour (caching, concurrency assumptions)
+- Domain behaviour — use-cases and workflows
+- Interface contracts — UI, APIs, and message schemas
+- Data structures — entities, constraints, relationships
+- Security posture — auth flows, authorization rules, boundaries
+- Integration & ecosystem — external calls, events, message schemas, data stores, and the dependencies a system relies on
+- Non-functional essentials that shape production behaviour — caching, concurrency assumptions
 
-In practice, implementers will still make choices (framework, UI toolkit), but HCS constrains those choices so that implementation converges predictably.
+This makes HCS a precise, traceable inventory for understanding, auditing, and
+planning the modernization of a system.
+
+> **On reproduction.** HCS makes no claim that a system can be regenerated from
+> its specification. Full behavioural reproduction is a research direction tracked
+> openly via the reproduction harness — it is *not* a current guarantee.
 
 ---
 
@@ -169,7 +175,7 @@ How the system talks to the outside world and how it is configured for productio
 
 ### F — Quality and Operational Behaviour
 
-Non-functional essentials that change how the system behaves in production and must be known to reproduce it faithfully.
+Non-functional essentials that change how the system behaves in production and must be known to describe its behaviour fully.
 
 | HCS must capture | Examples |
 |------------------|----------|
@@ -186,13 +192,14 @@ Non-functional essentials that change how the system behaves in production and m
 
 ---
 
-## Behavioural Equivalence — a cross-dimension proof layer
+## Behavioural layer — pinning what a system does
 
-Behavioural equivalence is **not a seventh dimension**. It is a *proof layer that
-sits across* dimensions A (Functional), C (Data), and E (Integration): it takes
-the structural facts those dimensions capture and pins *what the system actually
-does* with them — response shapes, value invariants, and event/protocol ordering —
-so a migration can be proven behaviour-preserving.
+The behavioural layer is **not a seventh dimension**. It is a *layer that sits
+across* dimensions A (Functional), C (Data), and E (Integration): it takes the
+structural facts those dimensions capture and pins *what the system actually does*
+with them — response shapes, value invariants, and event/protocol ordering — as
+deterministic, evidence-linked assertions that are diffable across scans to
+describe and detect behavioural change.
 
 - **Assertions** (`BehaviouralAssertion`) bind a claim about behaviour back to the
   facts it constrains. Each carries a `derivedBy` provenance — `static` (from facts
@@ -203,8 +210,8 @@ so a migration can be proven behaviour-preserving.
   language-agnostic expression IR. The same rule from any source language collapses
   to one canonical shape, so logic is hashable, diffable, and cross-comparable.
 - **Two honest measures, never blended.** `behaviouralConfidence` (0–100) answers
-  *"of the behaviour that ought to be preserved, how much have we pinned?"* and is
-  **capped by coverage**. `logicCoverage` (0–100) answers *"how much of the
+  *"of the behaviour-bearing surface, how much have we pinned with an assertion?"*
+  and is **capped by coverage**. `logicCoverage` (0–100) answers *"how much of the
   decision logic did we capture faithfully rather than leave `Opaque`?"* A green
   score means "a measured slice is pinned," never "complete."
 

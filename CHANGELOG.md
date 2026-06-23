@@ -215,10 +215,10 @@ false confidence from logic we could not faithfully represent.
 
 ### Fact ABI v0.3 — Behavioural Specification Layer (additive over v0.2)
 
-A **proof layer** that pins *what the system does* — not just what it declares — so
-a migration can be proven behaviour-preserving. These are **derived** facts,
-produced by the behavioural derivation layer and emitted through the same emitter,
-inheriting content-addressed `factId`s.
+A **behavioural layer** that pins *what the system does* — not just what it
+declares — so behavioural change can be described and detected across scans. These
+are **derived** facts, produced by the behavioural derivation layer and emitted
+through the same emitter, inheriting content-addressed `factId`s.
 
 #### New Fact Types (2)
 

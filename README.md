@@ -4,7 +4,9 @@
 
 This is the home of the complete Holistic Code Specification (HCS) reference documentation aimed at interpretation roles.
 
-These documents provide all the information needed to understand and interpret HCS files — the structured-English, evidence-linked, pattern-compressed system blueprints generated from source code.
+These documents provide all the information needed to understand and interpret HCS files — the structured-English, evidence-linked, pattern-compressed descriptions of a system generated from its source code.
+
+> **Current release: HCS v0.5.** The [Changelog](./CHANGELOG.md) is the single source of truth for the current version.
 
 ## Document Index
 
@@ -37,21 +39,43 @@ HCS is a **specification artifact** with:
 - Traceability (every claim links back to evidence in code)
 - Pattern compression (common idioms collapse into named patterns)
 
-### Behavioural Equivalence (Fact ABI v0.3–v0.4)
-Beyond structure, HCS pins *what the system does*: **behavioural assertions** bound
-to the facts they constrain, and decision logic captured in **HXL** — the
-deterministic, language-agnostic HCS Expression Language. Two honest, separate
-measures report progress: `behaviouralConfidence` (surface coverage) and
-`logicCoverage` (how much decision logic was captured faithfully). No LLM is ever
-in the path. See [Overview · Behavioural Equivalence](./01-hcs-overview.md#behavioural-equivalence--a-cross-dimension-proof-layer).
+### Behaviour pinning
+Beyond structure, HCS captures *what the system does*: **behavioural assertions**
+bound to the facts they constrain, with the decision logic inside methods lowered
+into **HXL** — the deterministic, language-agnostic HCS Expression Language. Two
+honest, separate measures report how much was captured — `behaviouralConfidence`
+(the share of behaviour-bearing surfaces pinned by an assertion) and
+`logicCoverage` (how much decision logic was captured faithfully vs. left
+explicitly opaque). Every assertion is evidence-linked and **no LLM is ever in the
+path**. See [Overview · Behavioural layer](./01-hcs-overview.md#behavioural-layer--pinning-what-a-system-does).
 
-### Reproducibility
-A system is reproducible from HCS when it contains enough detail to regenerate:
-- Domain behaviour (use-cases and workflows)
-- Interface contracts (UI + APIs + message schemas)
-- Data structures (entities, constraints, relationships)
-- Security posture (auth flows, authorization rules, boundaries)
-- Integration behaviour (calls, retries, timeouts, idempotency)
+## What HCS Delivers
+
+HCS exists to **discover and describe what a system actually does** — its
+behaviour, its data, and its place in the wider ecosystem — as deterministic,
+evidence-linked facts. The capabilities we assert and deliver today:
+
+- **System discovery & description** — the API surface and routes, the data model
+  (entities, fields, relationships, constraints), security boundaries and rules,
+  and the business logic inside methods, each linked back to the exact source
+  evidence it came from.
+- **Ecosystem & dependency mapping** — the external services, integrations,
+  events, message schemas, and data stores a system depends on, so you can see how
+  it connects to everything around it.
+- **Behaviour pinning & drift detection** — coverage-honest, diffable assertions
+  about observable behaviour that flag when a system's behaviour changes between
+  scans.
+- **Migration-grade inventory** — a faithful, traceable catalogue of a system to
+  scope, de-risk, and plan a modernization.
+
+Together these power the Vibgrate dashboard: **drill into any system and describe
+it in detail** — what it does, what it depends on, and how it behaves — all
+traceable to evidence in the source.
+
+> **On reproduction.** HCS makes no claim that a system can be regenerated from
+> its specification. Full behavioural reproduction is a research direction we
+> track openly via the reproduction harness — it is *not* a current guarantee, and
+> nothing here should be read as one.
 
 ---
 
