@@ -15,7 +15,7 @@ The Fact ABI is **additive**: every type and field from v0.2 remains valid and u
 Scanners emit one fact per line in **Newline-Delimited JSON** format:
 
 ```ndjson
-{"factId":"hcs:SymbolDeclared:b3c8a1f244e02a9c","factType":"SymbolDeclared","language":"csharp","scanner":"roslyn","scannerVersion":"0.2.0","emittedAt":"2026-01-15T12:00:00Z","payload":{…}}
+{"factId":"hcs:SymbolDeclared:b3c8a1f244e02a9c","factType":"SymbolDeclared","language":"csharp","scanner":"roslyn","scannerVersion":"0.2.0","emittedAt":"2026-01-15T12:00:00Z","payload":{"qualifiedName":"MyApi.Controllers.UsersController","symbolKind":"class"}}
 ```
 
 NDJSON was chosen for:
