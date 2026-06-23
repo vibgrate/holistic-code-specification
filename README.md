@@ -15,6 +15,8 @@ These documents provide all the information needed to understand and interpret H
 | [Intermediate Model](./03-hcs-intermediate-model.md) | Machine-facing data model, types, and evidence structures |
 | [HCS Fact Types](./04-hcs-fact-types.md) | Complete taxonomy of fact types captured from source code |
 | [HCS Patterns](./05-hcs-patterns.md) | Pattern system, type system, expansion templates, and standard library |
+| [Fact ABI JSON Schema](./hcs-fact-abi.schema.json) | Authoritative draft 2020-12 schema for the v0.5 behavioural/HXL fact types (FR-SCH-1) |
+| [Migration v0.4 → v0.5](./MIGRATION-v0.4-to-v0.5.md) | Breaking confidence-vocabulary change + alias map; dual versions; HXL/behavioural updates |
 | [Changelog](./CHANGELOG.md) | Version history and release notes |
 
 ## Reading Order

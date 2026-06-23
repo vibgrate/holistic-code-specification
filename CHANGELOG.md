@@ -138,16 +138,21 @@ requirements in `spec/` and the migration guide in
 - `RouteChar` grammar fixed to `/[A-Za-z0-9_{}:/-]/`; all nine COBOL fact types
   have a DSL rendering (no model-only fact type).
 
-#### Schema, validator & conformance (FR-SCH / FR-VAL / FR-CNF)
+#### Schema, validator & conformance (FR-SCH / FR-VAL / FR-CNF) — *shipped*
 
-- A published JSON Schema (draft 2020-12) is the authoritative structural
-  artifact; prose must not contradict it.
-- A reference validator recomputes every `factId`, `exprHash`, `fidelity`,
-  `logicCoverage`, `logicFacts`, and `behaviouralConfidence`, checks the
-  reproLevel worst-of and the promotion gates, and verifies canonical
-  re-serialisation, with the exit-code contract in Appendix I.
-- A conformance corpus (TypeScript, C#, COBOL) includes a cross-language
-  `exprHash` equivalence (`lt` and `eq` matching across languages).
+- A published JSON Schema (draft 2020-12) — [`hcs-fact-abi.schema.json`](./hcs-fact-abi.schema.json) —
+  is the authoritative structural artifact for the v0.5 behavioural/HXL ABI;
+  prose must not contradict it.
+- A **reference validator** (`vibgrate hcs validate`, engine in
+  `wasm/src/validator.rs`) recomputes `factId` / `exprHash` /
+  `behaviouralConfidence` / `logicFacts`, checks the FR-OBS-2 promotion gates,
+  the FR-BEH-3 coverage cap, the FR-CONF-1 vocabulary, FR-VER-1 versions, and
+  canonical (factId-sorted) ordering, returning the Appendix-I exit codes
+  (0 ok · 1 schema · 2 recompute · 3 invariant · 4 non-deterministic).
+- A conformance corpus exercises every exit class plus **byte-determinism**
+  (FR-CNF-2) and **cross-language `exprHash` equivalence** (FR-CNF-3: `lt` from
+  `<`/`LESS THAN`, `eq` from `==`/`EQUAL TO` hash-match).
+- `reproLevel` worst-of derivation (FR-REPRO-2) is implemented and tested.
 
 #### Migration & claim scoping (FR-MIG)
 

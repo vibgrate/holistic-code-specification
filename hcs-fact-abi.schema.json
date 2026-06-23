@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcs.vibgrate.io/schemas/fact-abi/v0.5.json",
+  "title": "HCS Fact ABI v0.5 — behavioural & HXL types",
+  "description": "Authoritative structural schema (FR-SCH-1) for the v0.5 behavioural/HXL fact types. A single fact envelope validates against this schema; structural facts are covered by their per-type producers. Prose in the artifacts must not contradict this file.",
+  "type": "object",
+  "required": ["factId", "factType", "language", "scanner", "scannerVersion", "emittedAt", "payload"],
+  "properties": {
+    "factId": { "type": "string", "pattern": "^hcs:[A-Za-z]+:[0-9a-f]{16}$" },
+    "factType": { "type": "string" },
+    "language": { "type": "string" },
+    "scanner": { "type": "string" },
+    "scannerVersion": { "type": "string" },
+    "emittedAt": { "type": "string" },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "factType": { "const": "BehaviouralAssertion" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/BehaviouralAssertion" } } }
+    },
+    {
+      "if": { "properties": { "factType": { "const": "BehaviouralSpec" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/BehaviouralSpec" } } }
+    },
+    {
+      "if": { "properties": { "factType": { "const": "TraceObserved" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/TraceObserved" } } }
+    }
+  ],
+  "$defs": {
+    "ClaimConfidence": {
+      "description": "FR-CONF-1 — the only permitted confidence values.",
+      "enum": ["Observed", "Derived", "Hypothesized"]
+    },
+    "DerivedBy": {
+      "description": "FR-OBS-1 epistemic spine.",
+      "enum": ["declared", "static", "trace", "learned"]
+    },
+    "HxlNode": {
+      "description": "FR-HXL-1 closed node-kind set. Operand fields are integer indices into the node table.",
+      "type": "object",
+      "required": ["k"],
+      "oneOf": [
+        { "properties": { "k": { "const": "Lit" }, "value": {}, "type": { "type": "string" } }, "required": ["k", "type"], "additionalProperties": false },
+        { "properties": { "k": { "const": "Ref" }, "name": { "type": "string" } }, "required": ["k", "name"], "additionalProperties": false },
+        { "properties": { "k": { "const": "Member" }, "obj": { "type": "integer" }, "name": { "type": "string" } }, "required": ["k", "obj", "name"], "additionalProperties": false },
+        { "properties": { "k": { "const": "Call" }, "callee": { "type": "integer" }, "args": { "type": "array", "items": { "type": "integer" } } }, "required": ["k", "callee", "args"], "additionalProperties": false },
+        { "properties": { "k": { "const": "Unary" }, "op": { "enum": ["not", "neg"] }, "x": { "type": "integer" } }, "required": ["k", "op", "x"], "additionalProperties": false },
+        { "properties": { "k": { "const": "Binary" }, "op": { "$ref": "#/$defs/HxlBinOp" }, "l": { "type": "integer" }, "r": { "type": "integer" } }, "required": ["k", "op", "l", "r"], "additionalProperties": false },
+        { "properties": { "k": { "const": "Cond" }, "cond": { "type": "integer" }, "then": { "type": "integer" }, "else": { "type": "integer" } }, "required": ["k", "cond", "then", "else"], "additionalProperties": false },
+        { "properties": { "k": { "const": "Slice" }, "base": { "type": "integer" }, "start": { "type": "integer" }, "length": { "type": "integer" } }, "required": ["k", "base", "start"], "additionalProperties": false },
+        { "properties": { "k": { "const": "Index" }, "base": { "type": "integer" }, "index": { "type": "integer" } }, "required": ["k", "base", "index"], "additionalProperties": false },
+        { "properties": { "k": { "const": "Opaque" }, "raw": { "type": "string" }, "operands": { "type": "array", "items": { "type": "integer" } } }, "required": ["k", "raw"], "additionalProperties": false }
+      ]
+    },
+    "HxlBinOp": {
+      "enum": ["eq", "ne", "lt", "le", "gt", "ge", "and", "or", "add", "sub", "mul", "div", "mod", "concat", "in", "notin"]
+    },
+    "HxlExprTable": {
+      "type": "object",
+      "required": ["nodes", "root"],
+      "properties": {
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/HxlNode" } },
+        "root": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "BehaviouralAssertion": {
+      "type": "object",
+      "required": ["id", "assertionId", "kind", "subjectFactIds", "statement", "predicate", "derivedBy", "confidence", "strength", "evidence"],
+      "properties": {
+        "id": { "type": "string" },
+        "assertionId": { "type": "string" },
+        "kind": { "enum": ["invariant", "contract", "effect", "ordering"] },
+        "subjectFactIds": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "statement": { "type": "string" },
+        "predicate": { "type": "string" },
+        "derivedBy": { "$ref": "#/$defs/DerivedBy" },
+        "confidence": { "$ref": "#/$defs/ClaimConfidence" },
+        "corpusRef": { "type": ["string", "null"] },
+        "strength": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence": { "type": "array" },
+        "predicateExprHash": { "type": "string", "pattern": "^hxl:[0-9a-f]{16}$" },
+        "label": { "type": ["string", "null"] },
+        "expr": { "$ref": "#/$defs/HxlExprTable" },
+        "heuristicId": { "type": "string" }
+      }
+    },
+    "BehaviouralSpec": {
+      "type": "object",
+      "required": ["factAbiVersion", "modelSchemaVersion", "specId", "scanId", "applicationId", "confidence", "assertionIds", "coverage", "confidenceComponents", "behaviouralConfidence", "logicFacts", "logicCoverage"],
+      "properties": {
+        "factAbiVersion": { "const": "0.5" },
+        "modelSchemaVersion": { "const": "0.5" },
+        "specId": { "type": "string" },
+        "scanId": { "type": "string" },
+        "applicationId": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/ClaimConfidence" },
+        "assertionIds": { "type": "array", "items": { "type": "string" } },
+        "coverage": {
+          "type": "object",
+          "required": ["surfaceFacts", "assertedFacts"],
+          "properties": {
+            "surfaceFacts": { "type": "integer", "minimum": 0 },
+            "assertedFacts": { "type": "integer", "minimum": 0 },
+            "byKind": { "type": "object", "additionalProperties": { "type": "integer" } }
+          }
+        },
+        "confidenceComponents": {
+          "type": "object",
+          "required": ["coverage", "rigour", "agreement"],
+          "properties": {
+            "coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+            "rigour": { "type": "number", "minimum": 0, "maximum": 1 },
+            "agreement": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "behaviouralConfidence": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "logicFacts": { "type": "integer", "minimum": 0 },
+        "logicCoverage": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "exprTables": { "type": "object", "additionalProperties": { "$ref": "#/$defs/HxlExprTable" } }
+      }
+    },
+    "TraceObserved": {
+      "description": "FR-OBS-3 — additive, populated later. Confidence is capped at Derived.",
+      "type": "object",
+      "required": ["subjectSymbolId", "observedBehaviour", "sampleCount", "traceEvidence", "confidence"],
+      "properties": {
+        "subjectSymbolId": { "type": "string" },
+        "observedBehaviour": { "type": "string" },
+        "sampleCount": { "type": "integer", "minimum": 0 },
+        "traceEvidence": { "type": "array" },
+        "confidence": { "enum": ["Derived", "Hypothesized"] }
+      }
+    }
+  }
+}
