@@ -18,6 +18,34 @@ window (FR-MIG-1) so v0.4 models keep loading.
 
 ---
 
+## Unreleased
+
+### Incremental extraction: `FileHashIndex` stream preamble (additive)
+
+The NDJSON result stream gains one optional preamble record alongside
+`ScanManifest` / `Models` / `References`:
+
+```json
+{"factType":"FileHashIndex","indexVersion":"1.0","algo":"sha256",
+ "payload":{"files":{"src/a.ts":"<sha256 hex>"},"dirs":{"":"<rollup>","src":"<rollup>"}}}
+```
+
+`files` maps every extracted file (normalised, forward-slash, repo-relative) to
+the sha256 of its content. `dirs` holds Merkle-style rollups: a directory's hash
+covers the sorted names+hashes of its immediate files and subdirectory rollups,
+with `""` as the repository root — so equal rollups prove an entire subtree
+unchanged in one comparison. A subsequent extraction diffs the stored index
+against the working tree, re-extracts only added/changed files, drops facts for
+changed/removed files, and splices the previous stream's remaining fact lines
+through byte-for-byte (engine entry points `hcs_build_file_index`,
+`hcs_incremental_plan`, `hcs_incremental_merge`).
+
+The record is **additive and optional**: consumers that do not understand it
+must skip it like any other preamble record, and streams without it simply
+force a full re-extraction. No existing fact type or field changes.
+
+---
+
 ## v0.5.0 — 16 June 2026
 
 ### Fact ABI v0.5 / Model Schema v0.5 — Conformance hardening
